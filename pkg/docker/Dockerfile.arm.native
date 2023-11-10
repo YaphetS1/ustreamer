@@ -1,24 +1,27 @@
-FROM balenalib/raspberrypi3-debian:build as build
+FROM balenalib/raspberrypi4-64-debian:latest as build
 
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
+		make \
+		libevent-dev \
 		gcc \
-		libjpeg8-dev \
+		libjpeg-dev \
 		libbsd-dev \
 		libgpiod-dev \
+		libcamera-tools \
 	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build/ustreamer/
 COPY . .
-RUN make -j5 WITH_GPIO=1
+RUN make -j5 WITH_GPIO=0
 
-FROM balenalib/raspberrypi3-debian:run as RUN
+FROM balenalib/raspberrypi4-64-debian:run as RUN
 
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
-		libevent-2.1 \
-		libevent-pthreads-2.1-6 \
-		libjpeg8 \
+		libevent-dev \
+		musl-dev \
+		libjpeg-dev \
 		libbsd0 \
 		libgpiod2 \
 	&& rm -rf /var/lib/apt/lists/*
@@ -27,6 +30,13 @@ WORKDIR /ustreamer
 COPY --from=build /build/ustreamer/ustreamer .
 
 EXPOSE 8080
-ENTRYPOINT ["./ustreamer", "--host=::"]
+# --format=uyvy \ # Device input format
+# "--encoder=m2m-image", \ # Hardware encoding on V4L2 M2M driver
+# --workers=3 \ # Workers number
+# --persistent \ # Don't re-initialize device on timeout (for example when HDMI cable was disconnected)
+# --drop-same-frames=30 # Save the traffic
+# "--resolution=1640x922"
+# libcamerify ./ustreamer --host 0.0.0.0 -q 100 -r 1280x720 --encoder=m2m-image --drop-same-frames=30
+ENTRYPOINT ["./ustreamer", "--device=/dev/video0", "--host=0.0.0.0", "--resolution=1280x720", "--encoder=m2m-image", "--persistent", "--drop-same-frames=30"]
 
 # vim: syntax=dockerfile
